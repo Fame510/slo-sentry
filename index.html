@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SLO Sentry — know when you can actually afford to deploy</title>
+<meta name="description" content="Error-budget calculator with real burn-rate math: how much downtime your SLO buys, when you're burning too fast, and the deploy freeze line. Free tool on the page.">
+<style>
+:root{--bg:#0e0e10;--amber:#f5a623;--panel:#17171a;--line:#2a2a2e;--tx:#e8e6e3;--dim:#8a8782;--sans:'Segoe UI',system-ui,sans-serif;--mono:'Cascadia Code',ui-monospace,monospace}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);line-height:1.6}
+.wrap{max-width:880px;margin:0 auto;padding:0 22px}
+header{padding:32px 0 8px;border-bottom:1px solid var(--line)}
+h1{font-size:28px;color:var(--amber)}
+.sub{color:var(--dim);margin-top:6px}
+h2{font-size:16px;color:var(--amber);text-transform:uppercase;letter-spacing:.1em;margin:36px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em}
+input,select{width:100%;padding:10px 12px;background:var(--panel);border:1px solid var(--line);color:var(--tx);font-family:var(--mono);font-size:15px;border-radius:6px}
+button{background:var(--amber);color:#111;border:0;padding:12px 28px;font-weight:700;font-size:15px;border-radius:6px;cursor:pointer;margin-top:16px}
+.res{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;display:none}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+.k{border-left:3px solid var(--amber);padding-left:12px}
+.k .v{font-family:var(--mono);font-size:24px;color:var(--amber)}
+.k .l{font-size:12px;color:var(--dim);margin-top:2px}
+.bar{height:14px;background:var(--line);border-radius:7px;margin-top:18px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#3ecf8e,var(--amber),#e05252)}
+.gauge{font-family:var(--mono);font-size:13px;color:var(--dim);margin-top:8px}
+.buy{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;margin-top:10px}
+.buy .p{font-size:32px;color:var(--amber);font-weight:700}
+footer{margin-top:50px;padding:18px 0 40px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+a{color:var(--amber)}
+ul{padding-left:20px}
+</style></head><body><div class="wrap">
+<header><h1>SLO Sentry</h1><div class="sub">Error-budget math that answers the real question: can we ship this week, or are we already burning it?</div></header>
+
+<p style="margin-top:24px;color:var(--tx)">An SLO without a budget is a mood. Enter your target and your last 30 days of downtime and this page tells you your burn rate, your projected breach date, and whether a deploy freeze is actually justified or just anxiety.</p>
+
+<h2>Your SLO</h2>
+<div class="grid">
+<div><label>SLO target</label><select id="slo"><option>99.9</option><option>99.95</option><option>99.99</option><option>99.5</option><option>99.0</option></select></div>
+<div><label>Downtime, last 30 days (minutes)</label><input id="down" type="number" value="22" min="0"></div>
+<div><label>Failed requests / total last 30d (optional, e.g. 4200/8600000)</label><input id="req" placeholder="e.g. 4200/8600000"></div>
+<div><label>Days since window start</label><input id="elapsed" type="number" value="30" min="1" max="30"></div>
+</div>
+<button onclick="calc()">compute budget</button>
+<div class="res" id="res">
+<div class="kpi">
+<div class="k"><div class="v" id="k-total">-</div><div class="l">total budget, 30d (min)</div></div>
+<div class="k"><div class="v" id="k-spent">-</div><div class="l">spent so far</div></div>
+<div class="k"><div class="v" id="k-rate">-</div><div class="l">burn rate</div></div>
+<div class="k"><div class="v" id="k-breach">-</div><div class="l">projected breach</div></div>
+</div>
+<div class="bar"><i id="fill" style="width:0%"></i></div>
+<div class="gauge" id="verdict">-</div>
+</div>
+
+<h2>What it computes</h2>
+<div class="buy"><ul>
+<li><b>Total budget:</b> (1 − SLO) × 30 days, in minutes. At 99.9%, that's 43.2 minutes a month. That's all of them.</li>
+<li><b>Burn rate:</b> downtime consumed ÷ budget elapsed so far. 1.0 = on the line. 3.0 = breach in ~10 days at this pace.</li>
+<li><b>Breach projection:</b> straight-line extrapolation of your current burn against the remaining budget.</li>
+<li><b>The verdict line:</b> a plain-language deploy call: green (ship), amber (change-freeze on risky deploys only), red (freeze + incident review).</li>
+</ul></div>
+
+<h2>The paid edition</h2>
+<div class="buy"><p class="p">$25 <span style="font-size:14px;color:var(--dim);font-weight:400">one-time</span></p>
+<p style="margin-top:10px">The paid edition adds the multi-window math (1h/6h/24h burn-rate alerts with the Google SRE alerting thresholds), a YAML config that drops straight into your alerting stack, the incident-review one-pager template your postmortems are missing, and a budget-sharing model for teams with two services splitting one SLO.</p>
+<p style="margin-top:12px">To buy, email <a href="mailto:orders.fo@wajo.ai?subject=SLO%20Sentry%20license">orders.fo@wajo.ai</a> with the name for your license. License, config pack, and invoice back the same day.</p></div>
+
+<footer>SLO Sentry is a product of Sovereign Logic, Oakland CA. The calculator on this page is the free tool, fully working, running entirely in your browser. No tracking, no accounts, nothing leaves the page.</footer>
+</div>
+<script>
+function calc(){
+var slo=parseFloat(document.getElementById('slo').value)/100;
+var down=+document.getElementById('down').value||0;
+var elapsed=Math.min(30,Math.max(1,+document.getElementById('elapsed').value||30));
+var total=30*24*60*(1-slo);
+var reqStr=document.getElementById('req').value.trim();
+if(reqStr.includes('/')&&reqStr.split('/')[1]>0){
+var parts=reqStr.split('/');down=Math.max(down,(+parts[0]/+parts[1])*30*24*60);
+}
+var pct=elapsed/30;
+var spent=down,budgetSoFar=total*pct;
+var rate=spent/Math.max(0.01,budgetSoFar);
+var remaining=total-spent;
+var breach=rate>1?Math.max(0,(remaining/(rate-1)*pct)) : Infinity;
+document.getElementById('res').style.display='block';
+document.getElementById('k-total').textContent=total.toFixed(1)+'m';
+document.getElementById('k-spent').textContent=spent.toFixed(1)+'m ('+Math.round(spent/total*100)+'%)';
+document.getElementById('k-rate').textContent=rate.toFixed(2)+'×';
+document.getElementById('k-breach').textContent=rate>1?('~'+Math.ceil(breach)+' days at this pace'):'none projected';
+var w=Math.min(100,spent/total*100);
+document.getElementById('fill').style.width=w+'%';
+var v=document.getElementById('verdict');
+if(rate>3){v.textContent='RED: '+rate.toFixed(1)+'× burn. Freeze risky deploys, open an incident review, page whoever owns the noisy dependency.'}
+else if(rate>1){v.textContent='AMBER: '+rate.toFixed(1)+'× burn. Ship only changes you can roll back in under 5 minutes. Watch the 24h window.'}
+else if(rate>0.6){v.textContent='GREEN (watch): '+rate.toFixed(1)+'× burn, normal range. Ship, but keep the dashboard open this week.'}
+else{v.textContent='GREEN: '+rate.toFixed(1)+'× burn. You have '+remaining.toFixed(0)+' spare minutes of budget. Ship with confidence.'}
+}
+calc();
+</script>
+</body></html>
